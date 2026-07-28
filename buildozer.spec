@@ -36,6 +36,10 @@ jobs:
           echo "⚠️ Warning: icon.png not found. Creating placeholder..."
           convert -size 512x512 xc:blue icon.png || echo "⚠️ ImageMagick not installed"
         fi
+        
+        if [ ! -f "android-permissions.xml" ]; then
+          echo "✅ android-permissions.xml already exists"
+        fi
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -112,13 +116,8 @@ jobs:
         mkdir -p android-ndk
         rsync -a android-ndk-r25b/ android-ndk/
         
-        # Export NDK path cho các bước sau
-        echo "NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b" >> $GITHUB_ENV
-        echo "ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b" >> $GITHUB_ENV
-        echo "ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-r25b" >> $GITHUB_ENV
-        
         echo "✅ SDK and NDK installed"
-        echo "   NDK: r25b (python-for-android compatible)"
+        echo "   NDK: r25b"
 
     - name: Create buildozer.spec
       run: |
@@ -138,7 +137,7 @@ jobs:
         fullscreen = 0
 
         # ========== THÊM OPENCV + NUMPY ==========
-        requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless,numpy
+        requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.9.0.80,numpy==1.26.4
 
         android.permissions = CAMERA,VIBRATE,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
 
@@ -148,9 +147,6 @@ jobs:
             <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
         android.add_assets = wifi_printers.json
-
-        # ========== ĐÃ XÓA DÒNG NÀY (GÂY LỖI) ==========
-        # android.add_src = libzbar
 
         presplash.filename = %(source.dir)s/icon.png
         android.presplash_color = #FFFFFF
@@ -186,39 +182,31 @@ jobs:
         buildozer android clean || true
         rm -rf ~/.buildozer/android/platform/build-* || true
 
-    # =========================================================
-    # BUILD - EXPORT NDK PATH TRƯỚC KHI CHẠY
-    # =========================================================
     - name: Build APK
       run: |
         export PATH="$HOME/.buildozer/android/platform/android-sdk/tools/bin:$PATH"
         export PATH="$HOME/.buildozer/android/platform/android-sdk/platform-tools:$PATH"
         export PATH="$HOME/.buildozer/android/platform/android-ndk-r25b:$PATH"
         
-        # Export NDK variables
         export ANDROID_NDK_HOME="$HOME/.buildozer/android/platform/android-ndk-r25b"
         export ANDROID_NDK_ROOT="$HOME/.buildozer/android/platform/android-ndk-r25b"
-        export NDK_HOME="$HOME/.buildozer/android/platform/android-ndk-r25b"
         
-        # Unset conflicting variables
         unset ANDROID_HOME ANDROID_SDK_ROOT
         
         mkdir -p build-logs
         
-        echo "🚀 Starting build with NDK r25b..."
-        echo "📌 API: 33, minAPI: 24"
-        echo "📌 NDK Path: $ANDROID_NDK_HOME"
+        echo "🚀 Starting build..."
+        echo "📌 NDK: r25b | API: 33 | minAPI: 24"
         
         buildozer -v android debug 2>&1 | tee build-logs/full-build-log.txt
         
         BUILD_EXIT_CODE=${PIPESTATUS[0]}
         
         if [ $BUILD_EXIT_CODE -eq 0 ]; then
-          echo "✅ Build command completed successfully"
+          echo "✅ Build completed successfully"
         else
-          echo "❌ Build command failed with exit code $BUILD_EXIT_CODE"
-          echo "📄 Error summary:"
-          grep -i "error\|failed\|exception\|traceback" build-logs/full-build-log.txt | tail -100
+          echo "❌ Build failed with exit code $BUILD_EXIT_CODE"
+          grep -i "error\|failed\|exception" build-logs/full-build-log.txt | tail -50
           exit $BUILD_EXIT_CODE
         fi
 
