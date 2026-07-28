@@ -1,0 +1,23 @@
+<!-- android-manifest.xml -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.example.orderprinter">
+    
+    <!-- QUYỀN CAMERA -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    
+    <!-- CAMERA FEATURE (required=false để chạy trên máy không có camera) -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    
+    <!-- QUYỀN BLUETOOTH -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    
+</manifest>
