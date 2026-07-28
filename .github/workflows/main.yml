@@ -1,4 +1,4 @@
-name: Build APK with Buildozer (Fix NDK Conflict)
+name: Build APK with Buildozer (PyZbar + OpenCV)
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       TERM: dumb
 
@@ -26,13 +27,11 @@ jobs:
 
     - name: Create required assets
       run: |
-        # Tạo wifi_printers.json rỗng nếu chưa có
         if [ ! -f "wifi_printers.json" ]; then
           echo '[]' > wifi_printers.json
           echo "✅ Created wifi_printers.json"
         fi
         
-        # Tạo icon nếu chưa có
         if [ ! -f "icon.png" ]; then
           echo "⚠️ Warning: icon.png not found. Creating placeholder..."
           convert -size 512x512 xc:blue icon.png || echo "⚠️ ImageMagick not installed"
@@ -78,7 +77,7 @@ jobs:
         restore-keys: gradle-${{ runner.os }}-
 
     # =========================================================
-    # SDK & NDK - TỐI ƯU CHO OPENCV + NUMPY
+    # SDK & NDK - DÙNG NDK 23c CHO OPENCV 4.5.x
     # =========================================================
     - name: Install Android SDK & NDK
       run: |
@@ -116,43 +115,115 @@ jobs:
         echo "✅ SDK and NDK installed"
         echo "   NDK: r23c (tương thích OpenCV 4.5.x)"
 
-    # =========================================================
-    # TẠO BUILDOZER.SPEC TỪ FILE CÓ SẴN HOẶC TẠO MỚI
-    # =========================================================
-    - name: Ensure buildozer.spec exists
+    - name: Create buildozer.spec
       run: |
-        if [ ! -f "buildozer.spec" ]; then
-          echo "❌ buildozer.spec not found!"
-          exit 1
-        fi
-        echo "✅ buildozer.spec found."
+        cat > buildozer.spec << 'EOF'
+        [app]
+        title = Order Printer
+        package.name = orderprinter
+        package.domain = org.example
+
+        source.dir = .
+        source.include_exts = py,png,jpg,jpeg,ttf,xml,json
+        icon.filename = %(source.dir)s/icon.png
+
+        version = 1.0.0
+
+        orientation = portrait
+        fullscreen = 0
+
+        # ========== THÊM OPENCV + NUMPY ==========
+        requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless,numpy
+
+        android.permissions = CAMERA,VIBRATE,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
+
+        android.manifest = android-permissions.xml
+        android.manifest.extra = 
+            <uses-feature android:name="android.hardware.camera" android:required="false" />
+            <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+        android.add_assets = wifi_printers.json
+
+        # ========== ĐÃ XÓA DÒNG NÀY (GÂY LỖI) ==========
+        # android.add_src = libzbar
+
+        presplash.filename = %(source.dir)s/icon.png
+        android.presplash_color = #FFFFFF
+
+        # ========== TỐI ƯU CHO OPENCV ==========
+        android.api = 33
+        android.minapi = 24
+        android.ndk = 23c
+        android.ndk_api = 21
+        android.archs = arm64-v8a,armeabi-v7a
+
+        p4a.branch = master
+
+        android.allow_backup = True
+        android.enable_androidx = True
+
+        exclude_patterns = tests,docs,*.pyc,*.pyo,*.md,__pycache__,.git
+
+        environment = 
+            PYTHONOPTIMIZE=2
+            KIVY_METRICS_DENSITY=2
+
+        [buildozer]
+        log_level = 2
+        warn_on_root = 1
+        android.accept_sdk_license = True
+        EOF
+        
+        echo "📄 buildozer.spec created"
 
     - name: Clean previous builds
       run: |
         buildozer android clean || true
         rm -rf ~/.buildozer/android/platform/build-* || true
 
-    # =========================================================
-    # BUILD APK
-    # =========================================================
     - name: Build APK
       run: |
         export PATH="$HOME/.buildozer/android/platform/android-sdk/tools/bin:$PATH"
         export PATH="$HOME/.buildozer/android/platform/android-sdk/platform-tools:$PATH"
         export PATH="$HOME/.buildozer/android/platform/android-ndk-r23c:$PATH"
         
-        # Xóa các biến môi trường có thể gây conflict
         unset ANDROID_HOME ANDROID_SDK_ROOT ANDROID_NDK_HOME ANDROID_NDK_ROOT
         
         mkdir -p build-logs
+        
         echo "🚀 Starting build with NDK r23c..."
         echo "📌 API: 33, minAPI: 24"
-        buildozer -v android debug 2>&1 | tee build-logs/build-error-log.txt
+        
+        buildozer -v android debug 2>&1 | tee build-logs/full-build-log.txt
+        
+        BUILD_EXIT_CODE=${PIPESTATUS[0]}
+        
+        if [ $BUILD_EXIT_CODE -eq 0 ]; then
+          echo "✅ Build command completed successfully"
+        else
+          echo "❌ Build command failed with exit code $BUILD_EXIT_CODE"
+          echo "📄 Error summary:"
+          grep -i "error\|failed\|exception\|traceback" build-logs/full-build-log.txt | tail -100
+          exit $BUILD_EXIT_CODE
+        fi
 
     - name: Find and copy APK
       run: |
         echo "🔍 Searching for APK..."
-        APK_PATH=$(find . -type f -name "*.apk" 2>/dev/null | head -1)
+        
+        APK_PATH=""
+        PATHS_TO_CHECK=(
+          "$(find . -name "*.apk" 2>/dev/null | head -1)"
+          "$(find ~/.buildozer -name "*.apk" 2>/dev/null | head -1)"
+          "$(find ~/.buildozer/android/platform/build-*/dists/orderprinter*/build/outputs/apk -name "*.apk" 2>/dev/null | head -1)"
+        )
+        
+        for p in "${PATHS_TO_CHECK[@]}"; do
+          if [ -n "$p" ] && [ -f "$p" ]; then
+            APK_PATH="$p"
+            break
+          fi
+        done
         
         if [ -n "$APK_PATH" ]; then
           echo "✅ Found APK at: $APK_PATH"
@@ -161,8 +232,6 @@ jobs:
           ls -la bin/
         else
           echo "❌ No APK found!"
-          echo "📁 Checking build directory..."
-          find ~/.buildozer -name "*.apk" 2>/dev/null || echo "No APK found"
           exit 1
         fi
 
