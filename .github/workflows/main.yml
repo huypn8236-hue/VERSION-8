@@ -67,24 +67,26 @@ jobs:
       with:
         path: ~/.buildozer
         key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-${{ runner.os }}-
+        restore-keys: |
+          buildozer-${{ runner.os }}-
 
     - name: Cache Gradle
       uses: actions/cache@v3
       with:
         path: ~/.gradle
         key: gradle-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-        restore-keys: gradle-${{ runner.os }}-
+        restore-keys: |
+          gradle-${{ runner.os }}-
 
     # =========================================================
-    # SDK & NDK - DÙNG NDK 23c CHO OPENCV 4.5.x
+    # INSTALL ANDROID SDK & NDK (r25b - REQUIRED FOR P4A)
     # =========================================================
     - name: Install Android SDK & NDK
       run: |
         mkdir -p $HOME/.buildozer/android/platform
         cd $HOME/.buildozer/android/platform
         
-        # --- SDK ---
+        # --- ANDROID SDK ---
         if [ ! -d "android-sdk/cmdline-tools/latest" ]; then
           echo "📦 Downloading Android SDK..."
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdtools.zip
@@ -96,25 +98,35 @@ jobs:
                  $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
         fi
         
+        # Accept licenses
         yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
           --sdk_root=$HOME/.buildozer/android/platform/android-sdk --licenses || true
         
+        # Install platform-tools, platforms, build-tools
         $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
           --sdk_root=$HOME/.buildozer/android/platform/android-sdk \
           "platform-tools" "platforms;android-33" "build-tools;33.0.2" || true
         
-        # --- NDK r23c (QUAN TRỌNG: CHO OPENCV 4.5.x) ---
-        if [ ! -d "android-ndk-r23c" ]; then
-          echo "📦 Downloading Android NDK r23c..."
-          wget -q https://dl.google.com/android/repository/android-ndk-r23c-linux.zip -O ndk.zip
+        # --- ANDROID NDK r25b ---
+        if [ ! -d "android-ndk-r25b" ]; then
+          echo "📦 Downloading Android NDK r25b..."
+          wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
           unzip -q ndk.zip
         fi
         mkdir -p android-ndk
-        rsync -a android-ndk-r23c/ android-ndk/
+        rsync -a android-ndk-r25b/ android-ndk/
         
-        echo "✅ SDK and NDK installed"
-        echo "   NDK: r23c (tương thích OpenCV 4.5.x)"
+        # Export NDK paths for later steps
+        echo "NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b" >> $GITHUB_ENV
+        echo "ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b" >> $GITHUB_ENV
+        echo "ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-r25b" >> $GITHUB_ENV
+        
+        echo "✅ SDK and NDK installed successfully"
+        echo "   ✅ NDK: r25b (compatible with python-for-android)"
 
+    # =========================================================
+    # CREATE BUILDOZER.SPEC
+    # =========================================================
     - name: Create buildozer.spec
       run: |
         cat > buildozer.spec << 'EOF'
@@ -132,32 +144,33 @@ jobs:
         orientation = portrait
         fullscreen = 0
 
-        # ========== THÊM OPENCV + NUMPY ==========
-        requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless,numpy
+        # ========== REQUIREMENTS ==========
+        requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.9.0.80,numpy==1.26.4
 
+        # ========== PERMISSIONS ==========
         android.permissions = CAMERA,VIBRATE,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
 
+        # ========== MANIFEST ==========
         android.manifest = android-permissions.xml
         android.manifest.extra = 
             <uses-feature android:name="android.hardware.camera" android:required="false" />
             <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
+        # ========== ASSETS ==========
         android.add_assets = wifi_printers.json
 
-        # ========== ĐÃ XÓA DÒNG NÀY (GÂY LỖI) ==========
-        # android.add_src = libzbar
-
+        # ========== PRESPLASH ==========
         presplash.filename = %(source.dir)s/icon.png
         android.presplash_color = #FFFFFF
 
-        # ========== TỐI ƯU CHO OPENCV ==========
+        # ========== ANDROID CONFIG ==========
         android.api = 33
         android.minapi = 24
-        android.ndk = 23c
+        android.ndk = 25b
         android.ndk_api = 21
         android.archs = arm64-v8a,armeabi-v7a
 
-        p4a.branch = master
+        p4a.branch = develop
 
         android.allow_backup = True
         android.enable_androidx = True
@@ -174,39 +187,63 @@ jobs:
         android.accept_sdk_license = True
         EOF
         
-        echo "📄 buildozer.spec created"
+        echo "📄 buildozer.spec created successfully"
+        echo "📌 NDK: 25b | API: 33 | minAPI: 24"
 
+    # =========================================================
+    # CLEAN PREVIOUS BUILDS
+    # =========================================================
     - name: Clean previous builds
       run: |
         buildozer android clean || true
         rm -rf ~/.buildozer/android/platform/build-* || true
+        echo "🧹 Cleaned previous builds"
 
+    # =========================================================
+    # BUILD APK
+    # =========================================================
     - name: Build APK
       run: |
         export PATH="$HOME/.buildozer/android/platform/android-sdk/tools/bin:$PATH"
         export PATH="$HOME/.buildozer/android/platform/android-sdk/platform-tools:$PATH"
-        export PATH="$HOME/.buildozer/android/platform/android-ndk-r23c:$PATH"
+        export PATH="$HOME/.buildozer/android/platform/android-ndk-r25b:$PATH"
         
-        unset ANDROID_HOME ANDROID_SDK_ROOT ANDROID_NDK_HOME ANDROID_NDK_ROOT
+        export ANDROID_NDK_HOME="$HOME/.buildozer/android/platform/android-ndk-r25b"
+        export ANDROID_NDK_ROOT="$HOME/.buildozer/android/platform/android-ndk-r25b"
+        
+        unset ANDROID_HOME ANDROID_SDK_ROOT
         
         mkdir -p build-logs
         
-        echo "🚀 Starting build with NDK r23c..."
-        echo "📌 API: 33, minAPI: 24"
+        echo "==========================================="
+        echo "🚀 STARTING BUILD"
+        echo "==========================================="
+        echo "📌 NDK: r25b"
+        echo "📌 API: 33"
+        echo "📌 minAPI: 24"
+        echo "📌 OpenCV: 4.9.0.80"
+        echo "📌 NumPy: 1.26.4"
+        echo "==========================================="
         
         buildozer -v android debug 2>&1 | tee build-logs/full-build-log.txt
         
         BUILD_EXIT_CODE=${PIPESTATUS[0]}
         
         if [ $BUILD_EXIT_CODE -eq 0 ]; then
-          echo "✅ Build command completed successfully"
+          echo "✅ Build completed successfully!"
         else
-          echo "❌ Build command failed with exit code $BUILD_EXIT_CODE"
-          echo "📄 Error summary:"
+          echo "❌ Build failed with exit code $BUILD_EXIT_CODE"
+          echo ""
+          echo "📄 ERROR SUMMARY (last 100 lines):"
+          echo "==========================================="
           grep -i "error\|failed\|exception\|traceback" build-logs/full-build-log.txt | tail -100
+          echo "==========================================="
           exit $BUILD_EXIT_CODE
         fi
 
+    # =========================================================
+    # FIND AND COPY APK
+    # =========================================================
     - name: Find and copy APK
       run: |
         echo "🔍 Searching for APK..."
@@ -216,6 +253,7 @@ jobs:
           "$(find . -name "*.apk" 2>/dev/null | head -1)"
           "$(find ~/.buildozer -name "*.apk" 2>/dev/null | head -1)"
           "$(find ~/.buildozer/android/platform/build-*/dists/orderprinter*/build/outputs/apk -name "*.apk" 2>/dev/null | head -1)"
+          "$(find ~/.buildozer/android/platform/build-*/dists/*/build/outputs/apk/debug -name "*.apk" 2>/dev/null | head -1)"
         )
         
         for p in "${PATHS_TO_CHECK[@]}"; do
@@ -229,12 +267,19 @@ jobs:
           echo "✅ Found APK at: $APK_PATH"
           mkdir -p bin
           cp "$APK_PATH" bin/app.apk
+          echo "✅ APK copied to bin/app.apk"
           ls -la bin/
         else
           echo "❌ No APK found!"
+          echo ""
+          echo "📁 Searching in .buildozer:"
+          find ~/.buildozer -name "*.apk" 2>/dev/null || echo "  No APK found"
           exit 1
         fi
 
+    # =========================================================
+    # UPLOAD ARTIFACTS
+    # =========================================================
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
@@ -255,6 +300,7 @@ jobs:
       run: |
         if [ -f "bin/app.apk" ]; then
           echo "🎉 APK built successfully!"
+          echo "📦 Download from: Actions → Artifacts → orderprinter-app"
         else
           echo "❌ Build failed. Check build-logs artifact"
         fi
