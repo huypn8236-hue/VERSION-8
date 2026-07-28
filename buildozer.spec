@@ -40,7 +40,7 @@ android.presplash_color = #FFFFFF
 android.api = 33
 android.minapi = 24
 android.ndk = 25b
-android.ndk_api = 21
+android.ndk_api = 24
 android.archs = arm64-v8a,armeabi-v7a
 
 # ⭐ Dùng develop để hỗ trợ tốt nhất
