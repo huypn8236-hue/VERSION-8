@@ -137,7 +137,7 @@ jobs:
         fullscreen = 0
 
         # ========== THÊM OPENCV + NUMPY ==========
-        requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.9.0.80,numpy==1.26.4
+        requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.5.5.64,numpy==1.19.5
 
         android.permissions = CAMERA,VIBRATE,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
 
@@ -155,7 +155,7 @@ jobs:
         android.api = 33
         android.minapi = 24
         android.ndk = 25b
-        android.ndk_api = 21
+        android.ndk_api = 24
         android.archs = arm64-v8a,armeabi-v7a
 
         p4a.branch = develop
