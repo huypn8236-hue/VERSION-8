@@ -31,8 +31,6 @@ android.permissions = INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BL
 # =========================================================
 android.manifest = android-manifest.xml
 
-android.manifest.extra = <uses-feature android:name="android.hardware.camera" android:required="false" />
-
 android.manifest.extra = 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
