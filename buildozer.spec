@@ -1,293 +1,64 @@
-name: Build APK with Buildozer (Classic Combo - OpenCV 4.5.5.64 + NDK 23c)
+[app]
+# --- Thông tin ứng dụng ---
+title = Order Printer
+package.name = orderprinter
+package.domain = org.example
 
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+# --- File nguồn ---
+source.dir = .
+source.include_exts = py,png,jpg,jpeg,ttf,xml,json
+icon.filename = %(source.dir)s/icon.png
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      TERM: dumb
+# --- Phiên bản ---
+version = 1.0.0
 
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+# --- Hiển thị ---
+orientation = portrait
+fullscreen = 0
 
-    - name: Ensure entry file exists
-      run: |
-        if [ ! -f "main.py" ]; then
-          echo "❌ ERROR: main.py not found"
-          ls -l
-          exit 1
-        fi
-        echo "✅ main.py found."
+# --- Thư viện yêu cầu ---
+# ⭐ COMBO: PYZBAR + OPENCV 4.5.5.64 + NUMPY (KHÔNG VERSION)
+requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.5.5.64,numpy
 
-    - name: Create required assets
-      run: |
-        if [ ! -f "wifi_printers.json" ]; then
-          echo '[]' > wifi_printers.json
-          echo "✅ Created wifi_printers.json"
-        fi
-        
-        if [ ! -f "icon.png" ]; then
-          echo "⚠️ Warning: icon.png not found. Creating placeholder..."
-          convert -size 512x512 xc:blue icon.png || echo "⚠️ ImageMagick not installed"
-        fi
-        
-        if [ ! -f "android-permissions.xml" ]; then
-          echo "✅ android-permissions.xml already exists"
-        fi
+# --- Quyền Android ---
+android.permissions = INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,CAMERA,VIBRATE
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.10"
+# === MANIFEST ===
+android.manifest = android-manifest.xml
+android.manifest.extra = 
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          git zip unzip openjdk-17-jdk python3-pip \
-          libffi-dev libssl-dev libsqlite3-dev \
-          libjpeg-dev libfreetype6-dev zlib1g-dev \
-          automake autoconf libtool libtool-bin autopoint gettext pkg-config \
-          m4 autoconf-archive make cmake ninja-build \
-          imagemagick
-        sudo mkdir -p /usr/share/aclocal
-        pip install --upgrade pip wheel setuptools Cython==0.29.36
-        pip install buildozer==1.4.0
+# === LIBZBAR (BẮT BUỘC CHO PYZBAR) ===
+android.add_src = libzbar
 
-    - name: Patch libtool / autoconf
-      run: |
-        sudo ln -sf /usr/bin/libtoolize /usr/bin/libtool || true
-        echo "m4_pattern_allow([^LT_SYS_SYMBOL_USCORE$])" | sudo tee -a /usr/share/aclocal/libtool.m4 > /dev/null
-        echo "m4_pattern_allow([^_LT_PROG_LTMAIN$])" | sudo tee -a /usr/share/aclocal/libtool.m4 > /dev/null
+# --- Tài nguyên đính kèm ---
+presplash.filename = %(source.dir)s/icon.png
+android.presplash_color = #FFFFFF
 
-    - name: Cache Buildozer & SDK/NDK
-      uses: actions/cache@v3
-      with:
-        path: ~/.buildozer
-        key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-${{ runner.os }}-
+# --- Android SDK / NDK ---
+android.api = 33
+android.minapi = 24
+android.ndk = 25b
+android.ndk_api = 21
+android.archs = arm64-v8a,armeabi-v7a
 
-    - name: Cache Gradle
-      uses: actions/cache@v3
-      with:
-        path: ~/.gradle
-        key: gradle-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-        restore-keys: gradle-${{ runner.os }}-
+# ⭐ Dùng develop để hỗ trợ tốt nhất
+p4a.branch = develop
 
-    # =========================================================
-    # SDK & NDK - DÙNG NDK 23c CHO OPENCV 4.5.5.64
-    # =========================================================
-    - name: Install Android SDK & NDK
-      run: |
-        mkdir -p $HOME/.buildozer/android/platform
-        cd $HOME/.buildozer/android/platform
-        
-        # --- SDK (API 30) ---
-        if [ ! -d "android-sdk/cmdline-tools/latest" ]; then
-          echo "📦 Downloading Android SDK..."
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdtools.zip
-          unzip -q cmdtools.zip -d android-sdk
-          mkdir -p android-sdk/cmdline-tools/latest
-          mv android-sdk/cmdline-tools/* android-sdk/cmdline-tools/latest/ 2>/dev/null || true
-          mkdir -p android-sdk/tools/bin
-          ln -sf $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
-                 $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-        fi
-        
-        yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
-          --sdk_root=$HOME/.buildozer/android/platform/android-sdk --licenses || true
-        
-        $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
-          --sdk_root=$HOME/.buildozer/android/platform/android-sdk \
-          "platform-tools" "platforms;android-30" "build-tools;30.0.3" || true
-        
-        # --- NDK r23c ---
-        if [ ! -d "android-ndk-r23c" ]; then
-          echo "📦 Downloading Android NDK r23c..."
-          wget -q https://dl.google.com/android/repository/android-ndk-r23c-linux.zip -O ndk.zip
-          unzip -q ndk.zip
-        fi
-        mkdir -p android-ndk
-        rsync -a android-ndk-r23c/ android-ndk/
-        
-        echo "✅ SDK and NDK installed"
-        echo "   NDK: r23c"
+android.allow_backup = True
+android.enable_androidx = True
 
-    # =========================================================
-    # CREATE BUILDOZER.SPEC (CLASSIC COMBO)
-    # =========================================================
-    - name: Create buildozer.spec
-      run: |
-        cat > buildozer.spec << 'EOF'
-        [app]
-        title = Order Printer
-        package.name = orderprinter
-        package.domain = org.example
+# --- Giảm kích thước APK ---
+exclude_patterns = tests,docs,*.pyc,*.pyo,*.md,__pycache__,.git
 
-        source.dir = .
-        source.include_exts = py,png,jpg,jpeg,ttf,xml,json
-        icon.filename = %(source.dir)s/icon.png
+# --- Môi trường ---
+environment = 
+    PYTHONOPTIMIZE=2
+    KIVY_METRICS_DENSITY=2
 
-        version = 1.0.0
-
-        orientation = portrait
-        fullscreen = 0
-
-        # =========================================================
-        # COMBO CỔ ĐIỂN - ĐÃ KIỂM CHỨNG
-        # =========================================================
-        requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.5.5.64,numpy==1.19.5
-
-        android.permissions = CAMERA,VIBRATE,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
-
-        android.manifest = android-permissions.xml
-        android.manifest.extra = 
-            <uses-feature android:name="android.hardware.camera" android:required="false" />
-            <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
-
-        android.add_assets = wifi_printers.json
-
-        presplash.filename = %(source.dir)s/icon.png
-        android.presplash_color = #FFFFFF
-
-        # =========================================================
-        # CẤU HÌNH ANDROID - NDK 23c + API 30
-        # =========================================================
-        android.api = 30
-        android.minapi = 21
-        android.ndk = 23c
-        android.ndk_api = 21
-        android.archs = arm64-v8a,armeabi-v7a
-
-        p4a.branch = 2022.2
-
-        android.allow_backup = True
-        android.enable_androidx = True
-
-        exclude_patterns = tests,docs,*.pyc,*.pyo,*.md,__pycache__,.git
-
-        environment = 
-            PYTHONOPTIMIZE=2
-            KIVY_METRICS_DENSITY=2
-
-        [buildozer]
-        log_level = 2
-        warn_on_root = 1
-        android.accept_sdk_license = True
-        EOF
-        
-        echo "📄 buildozer.spec created"
-        echo "✅ Classic combo: NDK 23c | API 30 | OpenCV 4.5.5.64 | NumPy 1.19.5"
-
-    - name: Clean previous builds
-      run: |
-        buildozer android clean || true
-        rm -rf ~/.buildozer/android/platform/build-* || true
-        rm -rf ~/.buildozer/android/platform/python-for-android || true
-        rm -rf ~/.buildozer/android/platform/hostpython3* || true
-        rm -rf ~/.buildozer/android/platform/python3* || true
-        echo "🧹 Cleaned all cache"
-
-    - name: Build APK
-      run: |
-        export PATH="$HOME/.buildozer/android/platform/android-sdk/tools/bin:$PATH"
-        export PATH="$HOME/.buildozer/android/platform/android-sdk/platform-tools:$PATH"
-        export PATH="$HOME/.buildozer/android/platform/android-ndk-r23c:$PATH"
-        
-        export ANDROID_NDK_HOME="$HOME/.buildozer/android/platform/android-ndk-r23c"
-        export ANDROID_NDK_ROOT="$HOME/.buildozer/android/platform/android-ndk-r23c"
-        
-        unset ANDROID_HOME ANDROID_SDK_ROOT
-        
-        mkdir -p build-logs
-        
-        echo "==========================================="
-        echo "🚀 STARTING BUILD - CLASSIC COMBO"
-        echo "==========================================="
-        echo "📌 NDK: r23c"
-        echo "📌 API: 30 | minAPI: 21"
-        echo "📌 OpenCV: 4.5.5.64"
-        echo "📌 NumPy: 1.19.5"
-        echo "📌 p4a: 2022.2"
-        echo "==========================================="
-        
-        buildozer -v android debug 2>&1 | tee build-logs/full-build-log.txt
-        
-        BUILD_EXIT_CODE=${PIPESTATUS[0]}
-        
-        if [ $BUILD_EXIT_CODE -eq 0 ]; then
-          echo "✅ Build completed successfully!"
-        else
-          echo "❌ Build failed with exit code $BUILD_EXIT_CODE"
-          echo ""
-          echo "📄 ERROR SUMMARY (last 100 lines):"
-          echo "==========================================="
-          grep -i "error\|failed\|exception\|traceback" build-logs/full-build-log.txt | tail -100
-          echo "==========================================="
-          exit $BUILD_EXIT_CODE
-        fi
-
-    - name: Find and copy APK
-      run: |
-        echo "🔍 Searching for APK..."
-        
-        APK_PATH=""
-        PATHS_TO_CHECK=(
-          "$(find . -name "*.apk" 2>/dev/null | head -1)"
-          "$(find ~/.buildozer -name "*.apk" 2>/dev/null | head -1)"
-          "$(find ~/.buildozer/android/platform/build-*/dists/orderprinter*/build/outputs/apk -name "*.apk" 2>/dev/null | head -1)"
-          "$(find ~/.buildozer/android/platform/build-*/dists/*/build/outputs/apk/debug -name "*.apk" 2>/dev/null | head -1)"
-        )
-        
-        for p in "${PATHS_TO_CHECK[@]}"; do
-          if [ -n "$p" ] && [ -f "$p" ]; then
-            APK_PATH="$p"
-            break
-          fi
-        done
-        
-        if [ -n "$APK_PATH" ]; then
-          echo "✅ Found APK at: $APK_PATH"
-          mkdir -p bin
-          cp "$APK_PATH" bin/app.apk
-          echo "✅ APK copied to bin/app.apk"
-          ls -la bin/
-        else
-          echo "❌ No APK found!"
-          echo ""
-          echo "📁 Searching in .buildozer:"
-          find ~/.buildozer -name "*.apk" 2>/dev/null || echo "  No APK found"
-          exit 1
-        fi
-
-    - name: Upload APK artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: orderprinter-app
-        path: bin/app.apk
-        retention-days: 30
-
-    - name: Upload build logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-logs
-        path: build-logs/
-        retention-days: 7
-
-    - name: Notify result
-      if: always()
-      run: |
-        if [ -f "bin/app.apk" ]; then
-          echo "🎉 APK built successfully!"
-          echo "📦 Download from: Actions → Artifacts → orderprinter-app"
-        else
-          echo "❌ Build failed. Check build-logs artifact"
-        fi
-        
+[buildozer]
+log_level = 2
+warn_on_root = 1
+android.accept_sdk_license = True
+android.enable_androidx = True
