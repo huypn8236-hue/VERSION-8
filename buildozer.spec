@@ -136,10 +136,8 @@ jobs:
         orientation = portrait
         fullscreen = 0
 
-        # ========== THÊM OPENCV + NUMPY ==========
+        # ========== OPENCV 4.10 + NUMPY (KHÔNG VERSION) ==========
         requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.10.0.84,numpy
-        #python_requires = 3.10
-        #hostpython3 = 3.10.0
 
         android.permissions = CAMERA,VIBRATE,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
 
@@ -153,7 +151,6 @@ jobs:
         presplash.filename = %(source.dir)s/icon.png
         android.presplash_color = #FFFFFF
 
-        # ========== TỐI ƯU CHO OPENCV ==========
         android.api = 33
         android.minapi = 24
         android.ndk = 25b
@@ -161,6 +158,11 @@ jobs:
         android.archs = arm64-v8a,armeabi-v7a
 
         p4a.branch = master
+
+        # =========================================================
+        # QUAN TRỌNG: ÉP P4A DÙNG PIP THAY VÌ BUILD TỪ SOURCE
+        # =========================================================
+        android.p4a_args = --use-pip
 
         android.allow_backup = True
         android.enable_androidx = True
@@ -178,11 +180,13 @@ jobs:
         EOF
         
         echo "📄 buildozer.spec created"
+        echo "✅ Added android.p4a_args = --use-pip"
 
     - name: Clean previous builds
       run: |
         buildozer android clean || true
         rm -rf ~/.buildozer/android/platform/build-* || true
+        rm -rf ~/.buildozer/android/platform/python-for-android || true
 
     - name: Build APK
       run: |
@@ -197,10 +201,18 @@ jobs:
         
         mkdir -p build-logs
         
-        echo "🚀 Starting build..."
+        echo "==========================================="
+        echo "🚀 STARTING BUILD"
+        echo "==========================================="
         echo "📌 NDK: r25b | API: 33 | minAPI: 24"
+        echo "📌 OpenCV: 4.10.0.84"
+        echo "📌 NumPy: latest (via pip)"
+        echo "📌 p4a branch: master"
+        echo "📌 Flags: --use-pip"
+        echo "==========================================="
         
-        buildozer -v android debug 2>&1 | tee build-logs/full-build-log.txt
+        # ⚠️ THÊM --use-pip VÀO LỆNH BUILDOZER
+        buildozer --use-pip -v android debug 2>&1 | tee build-logs/full-build-log.txt
         
         BUILD_EXIT_CODE=${PIPESTATUS[0]}
         
@@ -208,7 +220,11 @@ jobs:
           echo "✅ Build completed successfully"
         else
           echo "❌ Build failed with exit code $BUILD_EXIT_CODE"
+          echo ""
+          echo "📄 ERROR SUMMARY (last 50 lines):"
+          echo "==========================================="
           grep -i "error\|failed\|exception" build-logs/full-build-log.txt | tail -50
+          echo "==========================================="
           exit $BUILD_EXIT_CODE
         fi
 
@@ -263,3 +279,4 @@ jobs:
         else
           echo "❌ Build failed. Check build-logs artifact"
         fi
+        
