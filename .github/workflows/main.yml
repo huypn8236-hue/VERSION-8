@@ -1,4 +1,4 @@
-name: Build APK with Buildozer (PyZbar + OpenCV)
+name: Build APK with Buildozer (Patched NumPy)
 
 on:
   push:
@@ -31,7 +31,6 @@ jobs:
           echo '[]' > wifi_printers.json
           echo "✅ Created wifi_printers.json"
         fi
-        
         if [ ! -f "icon.png" ]; then
           echo "⚠️ Warning: icon.png not found. Creating placeholder..."
           convert -size 512x512 xc:blue icon.png || echo "⚠️ ImageMagick not installed"
@@ -67,28 +66,20 @@ jobs:
       with:
         path: ~/.buildozer
         key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-        restore-keys: |
-          buildozer-${{ runner.os }}-
+        restore-keys: buildozer-${{ runner.os }}-
 
     - name: Cache Gradle
       uses: actions/cache@v3
       with:
         path: ~/.gradle
         key: gradle-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-        restore-keys: |
-          gradle-${{ runner.os }}-
+        restore-keys: gradle-${{ runner.os }}-
 
-    # =========================================================
-    # INSTALL ANDROID SDK & NDK
-    # =========================================================
     - name: Install Android SDK & NDK
       run: |
         mkdir -p $HOME/.buildozer/android/platform
         cd $HOME/.buildozer/android/platform
-        
-        # --- ANDROID SDK ---
         if [ ! -d "android-sdk/cmdline-tools/latest" ]; then
-          echo "📦 Downloading Android SDK..."
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdtools.zip
           unzip -q cmdtools.zip -d android-sdk
           mkdir -p android-sdk/cmdline-tools/latest
@@ -97,28 +88,16 @@ jobs:
           ln -sf $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
                  $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
         fi
-        
-        yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
-          --sdk_root=$HOME/.buildozer/android/platform/android-sdk --licenses || true
-        
-        $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
-          --sdk_root=$HOME/.buildozer/android/platform/android-sdk \
-          "platform-tools" "platforms;android-33" "build-tools;33.0.2" || true
-        
-        # --- ANDROID NDK r25b ---
+        yes | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/.buildozer/android/platform/android-sdk --licenses || true
+        $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/.buildozer/android/platform/android-sdk "platform-tools" "platforms;android-33" "build-tools;33.0.2" || true
         if [ ! -d "android-ndk-r25b" ]; then
-          echo "📦 Downloading Android NDK r25b..."
           wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
           unzip -q ndk.zip
         fi
         mkdir -p android-ndk
         rsync -a android-ndk-r25b/ android-ndk/
-        
         echo "✅ SDK and NDK installed"
 
-    # =========================================================
-    # TẠO BUILDOZER.SPEC (SỬA P4A.BRANCH = MASTER)
-    # =========================================================
     - name: Create buildozer.spec
       run: |
         cat > buildozer.spec << 'EOF'
@@ -126,58 +105,64 @@ jobs:
         title = Order Printer
         package.name = orderprinter
         package.domain = org.example
-
         source.dir = .
         source.include_exts = py,png,jpg,jpeg,ttf,xml,json
         icon.filename = %(source.dir)s/icon.png
-
         version = 1.0.0
-
         orientation = portrait
         fullscreen = 0
-
-        # =========================================================
-        # COMBO OPENCV 4.5.5.64 + NUMPY + P4A MASTER
-        # =========================================================
         requirements = python3==3.11.0, hostpython3==3.11.0, kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.5.5.64,numpy==1.26.4
-
         android.permissions = CAMERA,VIBRATE,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
-
         android.manifest = android-permissions.xml
         android.manifest.extra = 
             <uses-feature android:name="android.hardware.camera" android:required="false" />
             <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
-
         android.add_assets = wifi_printers.json
-
         presplash.filename = %(source.dir)s/icon.png
         android.presplash_color = #FFFFFF
-
         android.api = 33
         android.minapi = 24
         android.ndk = 25b
         android.ndk_api = 24
         android.archs = arm64-v8a,armeabi-v7a
-
-        # ========== QUAN TRỌNG: CHUYỂN SANG MASTER ==========
-        p4a.branch = master
-
+        p4a.branch = develop
+        android.p4a_args = --use-pip
         android.allow_backup = True
         android.enable_androidx = True
-
         exclude_patterns = tests,docs,*.pyc,*.pyo,*.md,__pycache__,.git
-
         environment = 
             PYTHONOPTIMIZE=2
             KIVY_METRICS_DENSITY=2
-
         [buildozer]
         log_level = 2
         warn_on_root = 1
         android.accept_sdk_license = True
         EOF
-        
-        echo "📄 buildozer.spec created"
+
+    # =========================================================
+    # QUAN TRỌNG: PATCH NUMPY RECIPE ĐỂ DÙNG PIP INSTALL
+    # =========================================================
+    - name: Patch numpy recipe to skip git clone
+      run: |
+        # Đợi p4a tạo recipe sau lần build đầu tiên (sẽ chạy sau khi buildozer tạo môi trường)
+        # Nhưng chúng ta có thể patch trước khi build bằng cách sửa file trong thư mục python-for-android
+        # Tuy nhiên, p4a chưa được clone vào thời điểm này. Ta sẽ patch sau khi buildozer chạy lần đầu.
+        # Thay vào đó, ta sẽ tạo một script để patch ngay khi p4a clone xong.
+        echo "Tạo script patch numpy recipe..."
+        cat > patch_numpy.sh << 'SCRIPT'
+        #!/bin/bash
+        # Chờ đến khi file recipe xuất hiện
+        while [ ! -f ~/.buildozer/android/platform/python-for-android/pythonforandroid/recipes/numpy/__init__.py ]; do
+          sleep 2
+        done
+        echo "Patching numpy recipe..."
+        sed -i 's/self.download_file(self.url, filename)/# patched out/g' ~/.buildozer/android/platform/python-for-android/pythonforandroid/recipes/numpy/__init__.py
+        echo "Patch applied."
+        SCRIPT
+        chmod +x patch_numpy.sh
+        # Chạy script trong background trước khi build
+        ./patch_numpy.sh &
+        echo "✅ Patch script started"
 
     - name: Clean previous builds
       run: |
@@ -189,23 +174,13 @@ jobs:
         export PATH="$HOME/.buildozer/android/platform/android-sdk/tools/bin:$PATH"
         export PATH="$HOME/.buildozer/android/platform/android-sdk/platform-tools:$PATH"
         export PATH="$HOME/.buildozer/android/platform/android-ndk-r25b:$PATH"
-        
         export ANDROID_NDK_HOME="$HOME/.buildozer/android/platform/android-ndk-r25b"
         export ANDROID_NDK_ROOT="$HOME/.buildozer/android/platform/android-ndk-r25b"
-        
         unset ANDROID_HOME ANDROID_SDK_ROOT
-        
         mkdir -p build-logs
-        
-        echo "🚀 Starting build with NDK r25b..."
-        echo "📌 API: 33 | minAPI: 24"
-        echo "📌 OpenCV: 4.5.5.64 | NumPy: latest"
-        echo "📌 p4a branch: master"
-        
+        echo "🚀 Starting build..."
         buildozer -v android debug 2>&1 | tee build-logs/full-build-log.txt
-        
         BUILD_EXIT_CODE=${PIPESTATUS[0]}
-        
         if [ $BUILD_EXIT_CODE -eq 0 ]; then
           echo "✅ Build completed successfully"
         else
@@ -216,27 +191,10 @@ jobs:
 
     - name: Find and copy APK
       run: |
-        echo "🔍 Searching for APK..."
-        
-        APK_PATH=""
-        PATHS_TO_CHECK=(
-          "$(find . -name "*.apk" 2>/dev/null | head -1)"
-          "$(find ~/.buildozer -name "*.apk" 2>/dev/null | head -1)"
-          "$(find ~/.buildozer/android/platform/build-*/dists/orderprinter*/build/outputs/apk -name "*.apk" 2>/dev/null | head -1)"
-        )
-        
-        for p in "${PATHS_TO_CHECK[@]}"; do
-          if [ -n "$p" ] && [ -f "$p" ]; then
-            APK_PATH="$p"
-            break
-          fi
-        done
-        
+        APK_PATH=$(find . -name "*.apk" 2>/dev/null | head -1)
         if [ -n "$APK_PATH" ]; then
-          echo "✅ Found APK at: $APK_PATH"
           mkdir -p bin
           cp "$APK_PATH" bin/app.apk
-          ls -la bin/
         else
           echo "❌ No APK found!"
           exit 1
@@ -256,12 +214,3 @@ jobs:
         name: build-logs
         path: build-logs/
         retention-days: 7
-
-    - name: Notify result
-      if: always()
-      run: |
-        if [ -f "bin/app.apk" ]; then
-          echo "🎉 APK built successfully!"
-        else
-          echo "❌ Build failed. Check build-logs artifact"
-        fi
