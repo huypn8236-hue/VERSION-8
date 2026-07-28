@@ -36,6 +36,10 @@ jobs:
           echo "⚠️ Warning: icon.png not found. Creating placeholder..."
           convert -size 512x512 xc:blue icon.png || echo "⚠️ ImageMagick not installed"
         fi
+        
+        if [ ! -f "android-permissions.xml" ]; then
+          echo "✅ android-permissions.xml already exists"
+        fi
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -67,26 +71,24 @@ jobs:
       with:
         path: ~/.buildozer
         key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-        restore-keys: |
-          buildozer-${{ runner.os }}-
+        restore-keys: buildozer-${{ runner.os }}-
 
     - name: Cache Gradle
       uses: actions/cache@v3
       with:
         path: ~/.gradle
         key: gradle-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-        restore-keys: |
-          gradle-${{ runner.os }}-
+        restore-keys: gradle-${{ runner.os }}-
 
     # =========================================================
-    # INSTALL ANDROID SDK & NDK (r25b - REQUIRED FOR P4A)
+    # SDK & NDK - DÙNG NDK 25b (python-for-android yêu cầu >=25)
     # =========================================================
     - name: Install Android SDK & NDK
       run: |
         mkdir -p $HOME/.buildozer/android/platform
         cd $HOME/.buildozer/android/platform
         
-        # --- ANDROID SDK ---
+        # --- SDK ---
         if [ ! -d "android-sdk/cmdline-tools/latest" ]; then
           echo "📦 Downloading Android SDK..."
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdtools.zip
@@ -105,7 +107,7 @@ jobs:
           --sdk_root=$HOME/.buildozer/android/platform/android-sdk \
           "platform-tools" "platforms;android-33" "build-tools;33.0.2" || true
         
-        # --- ANDROID NDK r25b ---
+        # --- NDK r25b (python-for-android yêu cầu >=25) ---
         if [ ! -d "android-ndk-r25b" ]; then
           echo "📦 Downloading Android NDK r25b..."
           wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
@@ -114,16 +116,9 @@ jobs:
         mkdir -p android-ndk
         rsync -a android-ndk-r25b/ android-ndk/
         
-        echo "NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b" >> $GITHUB_ENV
-        echo "ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b" >> $GITHUB_ENV
-        echo "ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-r25b" >> $GITHUB_ENV
-        
-        echo "✅ SDK and NDK installed successfully"
-        echo "   ✅ NDK: r25b"
+        echo "✅ SDK and NDK installed"
+        echo "   NDK: r25b"
 
-    # =========================================================
-    # CREATE BUILDOZER.SPEC (ĐÃ THÊM --use-pip)
-    # =========================================================
     - name: Create buildozer.spec
       run: |
         cat > buildozer.spec << 'EOF'
@@ -141,26 +136,21 @@ jobs:
         orientation = portrait
         fullscreen = 0
 
-        # ========== REQUIREMENTS ==========
+        # ========== OPENCV 4.10 + NUMPY (KHÔNG VERSION) ==========
         requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.10.0.84,numpy
 
-        # ========== PERMISSIONS ==========
         android.permissions = CAMERA,VIBRATE,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
 
-        # ========== MANIFEST ==========
         android.manifest = android-permissions.xml
         android.manifest.extra = 
             <uses-feature android:name="android.hardware.camera" android:required="false" />
             <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
-        # ========== ASSETS ==========
         android.add_assets = wifi_printers.json
 
-        # ========== PRESPLASH ==========
         presplash.filename = %(source.dir)s/icon.png
         android.presplash_color = #FFFFFF
 
-        # ========== ANDROID CONFIG ==========
         android.api = 33
         android.minapi = 24
         android.ndk = 25b
@@ -170,7 +160,7 @@ jobs:
         p4a.branch = master
 
         # =========================================================
-        # ⚠️ QUAN TRỌNG: ÉP P4A DÙNG PIP THAY VÌ BUILD TỪ SOURCE
+        # QUAN TRỌNG: ÉP P4A DÙNG PIP THAY VÌ BUILD TỪ SOURCE
         # =========================================================
         android.p4a_args = --use-pip
 
@@ -189,23 +179,15 @@ jobs:
         android.accept_sdk_license = True
         EOF
         
-        echo "📄 buildozer.spec created successfully"
-        echo "📌 NDK: 25b | API: 33 | minAPI: 24"
-        echo "📌 Flags: --use-pip enabled"
+        echo "📄 buildozer.spec created"
+        echo "✅ Added android.p4a_args = --use-pip"
 
-    # =========================================================
-    # CLEAN PREVIOUS BUILDS
-    # =========================================================
     - name: Clean previous builds
       run: |
         buildozer android clean || true
         rm -rf ~/.buildozer/android/platform/build-* || true
         rm -rf ~/.buildozer/android/platform/python-for-android || true
-        echo "🧹 Cleaned previous builds"
 
-    # =========================================================
-    # BUILD APK (CÓ --use-pip)
-    # =========================================================
     - name: Build APK
       run: |
         export PATH="$HOME/.buildozer/android/platform/android-sdk/tools/bin:$PATH"
@@ -222,34 +204,30 @@ jobs:
         echo "==========================================="
         echo "🚀 STARTING BUILD"
         echo "==========================================="
-        echo "📌 NDK: r25b"
-        echo "📌 API: 33"
-        echo "📌 minAPI: 24"
+        echo "📌 NDK: r25b | API: 33 | minAPI: 24"
         echo "📌 OpenCV: 4.10.0.84"
         echo "📌 NumPy: latest (via pip)"
+        echo "📌 p4a branch: master"
         echo "📌 Flags: --use-pip"
         echo "==========================================="
         
-        # ⚠️ QUAN TRỌNG: THÊM --use-pip VÀO LỆNH
+        # ⚠️ THÊM --use-pip VÀO LỆNH BUILDOZER
         buildozer --use-pip -v android debug 2>&1 | tee build-logs/full-build-log.txt
         
         BUILD_EXIT_CODE=${PIPESTATUS[0]}
         
         if [ $BUILD_EXIT_CODE -eq 0 ]; then
-          echo "✅ Build completed successfully!"
+          echo "✅ Build completed successfully"
         else
           echo "❌ Build failed with exit code $BUILD_EXIT_CODE"
           echo ""
-          echo "📄 ERROR SUMMARY (last 100 lines):"
+          echo "📄 ERROR SUMMARY (last 50 lines):"
           echo "==========================================="
-          grep -i "error\|failed\|exception\|traceback" build-logs/full-build-log.txt | tail -100
+          grep -i "error\|failed\|exception" build-logs/full-build-log.txt | tail -50
           echo "==========================================="
           exit $BUILD_EXIT_CODE
         fi
 
-    # =========================================================
-    # FIND AND COPY APK
-    # =========================================================
     - name: Find and copy APK
       run: |
         echo "🔍 Searching for APK..."
@@ -259,7 +237,6 @@ jobs:
           "$(find . -name "*.apk" 2>/dev/null | head -1)"
           "$(find ~/.buildozer -name "*.apk" 2>/dev/null | head -1)"
           "$(find ~/.buildozer/android/platform/build-*/dists/orderprinter*/build/outputs/apk -name "*.apk" 2>/dev/null | head -1)"
-          "$(find ~/.buildozer/android/platform/build-*/dists/*/build/outputs/apk/debug -name "*.apk" 2>/dev/null | head -1)"
         )
         
         for p in "${PATHS_TO_CHECK[@]}"; do
@@ -273,19 +250,12 @@ jobs:
           echo "✅ Found APK at: $APK_PATH"
           mkdir -p bin
           cp "$APK_PATH" bin/app.apk
-          echo "✅ APK copied to bin/app.apk"
           ls -la bin/
         else
           echo "❌ No APK found!"
-          echo ""
-          echo "📁 Searching in .buildozer:"
-          find ~/.buildozer -name "*.apk" 2>/dev/null || echo "  No APK found"
           exit 1
         fi
 
-    # =========================================================
-    # UPLOAD ARTIFACTS
-    # =========================================================
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
@@ -306,7 +276,7 @@ jobs:
       run: |
         if [ -f "bin/app.apk" ]; then
           echo "🎉 APK built successfully!"
-          echo "📦 Download from: Actions → Artifacts → orderprinter-app"
         else
           echo "❌ Build failed. Check build-logs artifact"
         fi
+        
