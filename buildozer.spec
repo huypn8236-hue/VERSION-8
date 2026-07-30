@@ -18,7 +18,7 @@ fullscreen = 0
 
 # --- Thư viện yêu cầu ---
 # ⭐ COMBO: PYZBAR + OPENCV 4.5.5.64 + NUMPY (KHÔNG VERSION)
-requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.5.5.64,numpy
+requirements = python3==3.11.0, hostpython3==3.11.0, kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.5.5.64,numpy==1.25.4
 
 # --- Quyền Android ---
 android.permissions = INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,CAMERA,VIBRATE
@@ -45,7 +45,7 @@ android.archs = arm64-v8a,armeabi-v7a
 
 # ⭐ Dùng develop để hỗ trợ tốt nhất
 p4a.branch = master
-p4a.comit = v2024.01.21
+p4a.commit = v2024.01.21
 
 android.allow_backup = True
 android.enable_androidx = True
