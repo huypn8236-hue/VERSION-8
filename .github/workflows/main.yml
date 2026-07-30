@@ -134,7 +134,6 @@ jobs:
         environment = 
             PYTHONOPTIMIZE=2
             KIVY_METRICS_DENSITY=2
-            URL_numpy = https://files.pythonhosted.org/packages/a0/41/8f53eff8e969dd8576ddfb45e7ed315407d27c7518ae49418be8ed532b07/numpy-1.25.2.tar.gz
         [buildozer]
         log_level = 2
         warn_on_root = 1
@@ -142,29 +141,24 @@ jobs:
         EOF
 
     # =========================================================
-    # QUAN TRỌNG: PATCH NUMPY RECIPE ĐỂ DÙNG PIP INSTALL
+    # FIX NUMPY RECIPE URL (thay .zip bằng .tar.gz)
     # =========================================================
-    - name: Patch numpy recipe to skip git clone
+    - name: Fix numpy recipe URL
       run: |
-        # Đợi p4a tạo recipe sau lần build đầu tiên (sẽ chạy sau khi buildozer tạo môi trường)
-        # Nhưng chúng ta có thể patch trước khi build bằng cách sửa file trong thư mục python-for-android
-        # Tuy nhiên, p4a chưa được clone vào thời điểm này. Ta sẽ patch sau khi buildozer chạy lần đầu.
-        # Thay vào đó, ta sẽ tạo một script để patch ngay khi p4a clone xong.
-        echo "Tạo script patch numpy recipe..."
-        cat > patch_numpy.sh << 'SCRIPT'
+        echo "Đợi p4a clone hoàn tất và sửa URL trong recipe numpy..."
+        cat > fix_numpy_recipe.sh << 'SCRIPT'
         #!/bin/bash
-        # Chờ đến khi file recipe xuất hiện
         while [ ! -f ~/.buildozer/android/platform/python-for-android/pythonforandroid/recipes/numpy/__init__.py ]; do
           sleep 2
         done
-        echo "Patching numpy recipe..."
-        sed -i 's/self.download_file(self.url, filename)/# patched out/g' ~/.buildozer/android/platform/python-for-android/pythonforandroid/recipes/numpy/__init__.py
-        echo "Patch applied."
+        echo "Đã tìm thấy recipe numpy. Đang sửa URL..."
+        sed -i 's|https://pypi.python.org/packages/source/n/numpy/numpy-.*\.zip|https://files.pythonhosted.org/packages/a0/41/8f53eff8e969dd8576ddfb45e7ed315407d27c7518ae49418be8ed532b07/numpy-1.25.2.tar.gz|g' ~/.buildozer/android/platform/python-for-android/pythonforandroid/recipes/numpy/__init__.py
+        sed -i 's/numpy-.*\.zip/numpy-1.25.2.tar.gz/g' ~/.buildozer/android/platform/python-for-android/pythonforandroid/recipes/numpy/__init__.py
+        echo "✅ Đã sửa URL numpy recipe."
         SCRIPT
-        chmod +x patch_numpy.sh
-        # Chạy script trong background trước khi build
-        ./patch_numpy.sh &
-        echo "✅ Patch script started"
+        chmod +x fix_numpy_recipe.sh
+        ./fix_numpy_recipe.sh &
+        echo "✅ Script fix recipe đã khởi động."
 
     - name: Clean previous builds
       run: |
@@ -178,6 +172,8 @@ jobs:
         export PATH="$HOME/.buildozer/android/platform/android-ndk-r25b:$PATH"
         export ANDROID_NDK_HOME="$HOME/.buildozer/android/platform/android-ndk-r25b"
         export ANDROID_NDK_ROOT="$HOME/.buildozer/android/platform/android-ndk-r25b"
+        # ⚠️ Export URL_numpy (dù script đã sửa recipe)
+        export URL_numpy="https://files.pythonhosted.org/packages/a0/41/8f53eff8e969dd8576ddfb45e7ed315407d27c7518ae49418be8ed532b07/numpy-1.25.2.tar.gz"
         unset ANDROID_HOME ANDROID_SDK_ROOT
         mkdir -p build-logs
         echo "🚀 Starting build..."
