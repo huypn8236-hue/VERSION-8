@@ -18,7 +18,7 @@ fullscreen = 0
 
 # --- Thư viện yêu cầu ---
 # ⭐ COMBO: PYZBAR + OPENCV 4.5.5.64 + NUMPY (KHÔNG VERSION)
-requirements = python3==3.11.0, hostpython3==3.11.0, kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.5.5.64,numpy==1.25.2
+requirements = python3==3.11.0, hostpython3==3.11.0, kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv,numpy
 
 # --- Quyền Android ---
 android.permissions = INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,CAMERA,VIBRATE
@@ -57,7 +57,6 @@ exclude_patterns = tests,docs,*.pyc,*.pyo,*.md,__pycache__,.git
 environment = 
     PYTHONOPTIMIZE=2
     KIVY_METRICS_DENSITY=2
-    URL_numpy = https://files.pythonhosted.org/packages/a0/41/8f53eff8e969dd8576ddfb45e7ed315407d27c7518ae49418be8ed532b07/numpy-1.25.2.tar.gz
 
 [buildozer]
 log_level = 2
