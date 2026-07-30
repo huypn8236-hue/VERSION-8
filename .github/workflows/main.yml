@@ -172,11 +172,29 @@ jobs:
         export PATH="$HOME/.buildozer/android/platform/android-ndk-r25b:$PATH"
         export ANDROID_NDK_HOME="$HOME/.buildozer/android/platform/android-ndk-r25b"
         export ANDROID_NDK_ROOT="$HOME/.buildozer/android/platform/android-ndk-r25b"
-        # ⚠️ Export URL_numpy (dù script đã sửa recipe)
         export URL_numpy="https://files.pythonhosted.org/packages/a0/41/8f53eff8e969dd8576ddfb45e7ed315407d27c7518ae49418be8ed532b07/numpy-1.25.2.tar.gz"
+        # ⚠️ Export URL_numpy (dù script đã sửa recipe)
+        
+
+        
+        # =========================================================
+        # OPTION 2: WORKAROUND CHO NUMPY CONFIGURE
+        # =========================================================
+        # Force link math library
+        export CFLAGS="-O2 -fPIC -lm $CFLAGS"
+        export LDFLAGS="-lm $LDFLAGS"
+        
+        # Pretend math functions exist (bypass configure checks)
+        for f in sin cos tan sinh cosh tanh fabs floor ceil sqrt log10 log exp asin acos atan fmod modf frexp ldexp expm1 log1p acosh asinh atanh; do
+          export ac_cv_func_$f=yes
+        done
+        
+        # Disable CPU dispatch features (avoid extra checks)
+        export NPY_DISABLE_CPU_FEATURES=1
+        
         unset ANDROID_HOME ANDROID_SDK_ROOT
         mkdir -p build-logs
-        echo "🚀 Starting build..."
+        echo "🚀 Starting build (with NumPy math workaround)..."
         buildozer -v android debug 2>&1 | tee build-logs/full-build-log.txt
         BUILD_EXIT_CODE=${PIPESTATUS[0]}
         if [ $BUILD_EXIT_CODE -eq 0 ]; then
