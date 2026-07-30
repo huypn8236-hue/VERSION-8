@@ -57,6 +57,7 @@ exclude_patterns = tests,docs,*.pyc,*.pyo,*.md,__pycache__,.git
 environment = 
     PYTHONOPTIMIZE=2
     KIVY_METRICS_DENSITY=2
+    URL_numpy = https://files.pythonhosted.org/packages/a0/41/8f53eff8e969dd8576ddfb45e7ed315407d27c7518ae49418be8ed532b07/numpy-1.25.2.tar.gz
 
 [buildozer]
 log_level = 2
