@@ -1,4 +1,4 @@
-name: Build APK with Buildozer (Patched NumPy)
+name: Build APK with Buildozer (Clean - p4a numpy recipe)
 
 on:
   push:
@@ -111,7 +111,12 @@ jobs:
         version = 1.0.0
         orientation = portrait
         fullscreen = 0
-        requirements = python3==3.11.0, hostpython3==3.11.0, kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.5.5.64,numpy==1.25.2
+
+        # =========================================================
+        # QUAN TRỌNG: Dùng openblas + numpy recipe của p4a
+        # =========================================================
+        requirements = python3==3.11.0, hostpython3==3.11.0, kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv,numpy
+
         android.permissions = CAMERA,VIBRATE,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
         android.manifest = android-permissions.xml
         android.manifest.extra = 
@@ -125,8 +130,13 @@ jobs:
         android.ndk = 25b
         android.ndk_api = 24
         android.archs = arm64-v8a,armeabi-v7a
+
+        # =========================================================
+        # Dùng develop để có recipe numpy mới nhất
+        # =========================================================
         p4a.branch = master
-        p4a.commit = v2024.01.21
+        p4a.commet = v2024.01.21
+
         android.p4a_args = --use-pip
         android.allow_backup = True
         android.enable_androidx = True
@@ -140,26 +150,6 @@ jobs:
         android.accept_sdk_license = True
         EOF
 
-    # =========================================================
-    # FIX NUMPY RECIPE URL (thay .zip bằng .tar.gz)
-    # =========================================================
-    - name: Fix numpy recipe URL
-      run: |
-        echo "Đợi p4a clone hoàn tất và sửa URL trong recipe numpy..."
-        cat > fix_numpy_recipe.sh << 'SCRIPT'
-        #!/bin/bash
-        while [ ! -f ~/.buildozer/android/platform/python-for-android/pythonforandroid/recipes/numpy/__init__.py ]; do
-          sleep 2
-        done
-        echo "Đã tìm thấy recipe numpy. Đang sửa URL..."
-        sed -i 's|https://pypi.python.org/packages/source/n/numpy/numpy-.*\.zip|https://files.pythonhosted.org/packages/a0/41/8f53eff8e969dd8576ddfb45e7ed315407d27c7518ae49418be8ed532b07/numpy-1.25.2.tar.gz|g' ~/.buildozer/android/platform/python-for-android/pythonforandroid/recipes/numpy/__init__.py
-        sed -i 's/numpy-.*\.zip/numpy-1.25.2.tar.gz/g' ~/.buildozer/android/platform/python-for-android/pythonforandroid/recipes/numpy/__init__.py
-        echo "✅ Đã sửa URL numpy recipe."
-        SCRIPT
-        chmod +x fix_numpy_recipe.sh
-        ./fix_numpy_recipe.sh &
-        echo "✅ Script fix recipe đã khởi động."
-
     - name: Clean previous builds
       run: |
         buildozer android clean || true
@@ -172,29 +162,9 @@ jobs:
         export PATH="$HOME/.buildozer/android/platform/android-ndk-r25b:$PATH"
         export ANDROID_NDK_HOME="$HOME/.buildozer/android/platform/android-ndk-r25b"
         export ANDROID_NDK_ROOT="$HOME/.buildozer/android/platform/android-ndk-r25b"
-        export URL_numpy="https://files.pythonhosted.org/packages/a0/41/8f53eff8e969dd8576ddfb45e7ed315407d27c7518ae49418be8ed532b07/numpy-1.25.2.tar.gz"
-        # ⚠️ Export URL_numpy (dù script đã sửa recipe)
-        
-
-        
-        # =========================================================
-        # OPTION 2: WORKAROUND CHO NUMPY CONFIGURE
-        # =========================================================
-        # Force link math library
-        export CFLAGS="-O2 -fPIC -lm $CFLAGS"
-        export LDFLAGS="-lm $LDFLAGS"
-        
-        # Pretend math functions exist (bypass configure checks)
-        for f in sin cos tan sinh cosh tanh fabs floor ceil sqrt log10 log exp asin acos atan fmod modf frexp ldexp expm1 log1p acosh asinh atanh; do
-          export ac_cv_func_$f=yes
-        done
-        
-        # Disable CPU dispatch features (avoid extra checks)
-        export NPY_DISABLE_CPU_FEATURES=1
-        
         unset ANDROID_HOME ANDROID_SDK_ROOT
         mkdir -p build-logs
-        echo "🚀 Starting build (with NumPy math workaround)..."
+        echo "🚀 Starting build with p4a numpy recipe (openblas)..."
         buildozer -v android debug 2>&1 | tee build-logs/full-build-log.txt
         BUILD_EXIT_CODE=${PIPESTATUS[0]}
         if [ $BUILD_EXIT_CODE -eq 0 ]; then
