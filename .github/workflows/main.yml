@@ -135,7 +135,7 @@ jobs:
         # Dùng develop để có recipe numpy mới nhất
         # =========================================================
         p4a.branch = master
-        p4a.commet = v2024.01.21
+        p4a.commit = v2024.01.21
 
         android.p4a_args = --use-pip
         android.allow_backup = True
