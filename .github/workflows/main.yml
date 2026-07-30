@@ -111,7 +111,7 @@ jobs:
         version = 1.0.0
         orientation = portrait
         fullscreen = 0
-        requirements = python3==3.11.0, hostpython3==3.11.0, kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.5.5.64,numpy==1.25.4
+        requirements = python3==3.11.0, hostpython3==3.11.0, kivy,pyjnius,pillow,plyer,certifi,pyzbar,opencv-python-headless==4.5.5.64,numpy==1.25.2
         android.permissions = CAMERA,VIBRATE,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
         android.manifest = android-permissions.xml
         android.manifest.extra = 
